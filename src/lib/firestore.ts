@@ -17,9 +17,9 @@ export async function getAttendance() {
   const querySnapshot = await getDocs(q);
 
   return querySnapshot.docs.map((doc) => {
-    const data = doc.data() as any;
+    const data = doc.data() as { uid: string; name: string; rollNo: string; timestamp: unknown };
     const ts = data.timestamp;
-    const timestamp = ts && typeof ts.toDate === "function" ? ts.toDate().toISOString() : ts;
+    const timestamp = ts && typeof ts === 'object' && ts !== null && 'toDate' in ts && typeof (ts as { toDate: () => Date }).toDate === "function" ? (ts as { toDate: () => Date }).toDate().toISOString() : ts;
     return {
       id: doc.id,
       ...data,
