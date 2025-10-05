@@ -30,7 +30,6 @@ export default function AdminPage() {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [viewDate, setViewDate] = useState("");
   const [viewTimeSlot, setViewTimeSlot] = useState("");
-  const [user, setUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
   const router = useRouter();
 
@@ -52,7 +51,7 @@ export default function AdminPage() {
         return;
       }
       
-      setUser(currentUser);
+
       
       // Check if user is admin
       const adminStatus = await isAdmin(currentUser.uid);

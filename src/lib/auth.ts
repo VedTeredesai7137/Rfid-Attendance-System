@@ -22,7 +22,7 @@ export const registerUser = async (email: string, password: string): Promise<Use
     });
     
     return userCredential.user;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Firebase registration error:", error);
     throw error;
   }
@@ -40,14 +40,15 @@ export const loginUser = async (email: string, password: string): Promise<User> 
     }
     
     return userCredential.user;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Firebase login error:", error);
+    const firebaseError = error as { code?: string; message?: string };
     // Enhance error message for common Firebase auth errors
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+    if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password') {
       throw new Error("Invalid email or password");
-    } else if (error.code === 'auth/too-many-requests') {
+    } else if (firebaseError.code === 'auth/too-many-requests') {
       throw new Error("Too many failed login attempts. Please try again later.");
-    } else if (error.code === 'auth/network-request-failed') {
+    } else if (firebaseError.code === 'auth/network-request-failed') {
       throw new Error("Network error. Please check your connection.");
     }
     throw error;

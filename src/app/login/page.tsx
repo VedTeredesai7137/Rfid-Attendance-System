@@ -32,8 +32,8 @@ const LoginPage = () => {
     try {
       await loginUser(email, password);
       router.push("/admin");
-    } catch (err: any) {
-      setError(err.message || "Login failed");
+    } catch (err) {
+      setError((err as Error).message || "Login failed");
     } finally {
       setLoading(false);
     }

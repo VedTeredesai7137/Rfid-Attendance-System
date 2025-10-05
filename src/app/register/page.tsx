@@ -37,8 +37,8 @@ const RegisterPage = () => {
       setTimeout(() => {
         router.push("/admin");
       }, 1500);
-    } catch (err: any) {
-      setError(err.message || "Registration failed");
+    } catch (err) {
+      setError((err as Error).message || "Registration failed");
     } finally {
       setLoading(false);
     }
