@@ -1,6 +1,6 @@
 // src/lib/session.ts
 import { db } from "../../firebase/Client";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export interface ActiveSession {
   date: string; // YYYY-MM-DD format
@@ -88,10 +88,17 @@ export async function getAttendanceBySession(date: string, timeSlot: string): Pr
   const q = query(attendanceRef, orderBy("timestamp", "desc"));
   const querySnapshot = await getDocs(q);
   
-  return querySnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as AttendanceRecord[];
+  return querySnapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      uid: data.uid,
+      name: data.name,
+      rollNo: data.rollNo,
+      timestamp: data.timestamp,
+      date: data.date,
+      timeSlot: data.timeSlot,
+    } as AttendanceRecord;
+  });
 }
 
 // Get all dates with attendance

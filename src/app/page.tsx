@@ -13,7 +13,6 @@ interface ActiveSession {
 
 export default function Home() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
-  const [lastScan, setLastScan] = useState<any>(null);
 
   // Fetch active session every 5 seconds
   useEffect(() => {

@@ -83,7 +83,7 @@ export default function AdminPage() {
         const error = await response.json();
         setMessage(`Error: ${error.message}`);
       }
-    } catch (error) {
+    } catch {
       setMessage("Error setting active session");
     } finally {
       setLoading(false);
@@ -104,7 +104,7 @@ export default function AdminPage() {
         const error = await response.json();
         setMessage(`Error: ${error.message}`);
       }
-    } catch (error) {
+    } catch {
       setMessage("Error deactivating session");
     } finally {
       setLoading(false);
@@ -128,7 +128,7 @@ export default function AdminPage() {
         const error = await response.json();
         setMessage(`Error: ${error.message}`);
       }
-    } catch (error) {
+    } catch {
       setMessage("Error fetching attendance");
     } finally {
       setLoading(false);
