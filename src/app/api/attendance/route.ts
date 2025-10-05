@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { studentDatabase } from "./studentData";
-import { logAttendance, getAttendance } from "@/lib/firestore";
+import { getActiveSession, logAttendanceWithSession } from "@/lib/session";
 
 type AttendanceItem = {
   uid: string;
   name: string;
   rollNo: string;
   timestamp: string;
+  date: string;
+  timeSlot: string;
 };
 
 function normalizeUid(raw: string) {
@@ -27,6 +29,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    // Check for active session
+    const activeSession = await getActiveSession();
+    if (!activeSession) {
+      return NextResponse.json({ 
+        message: "No active session. Please set a date and time slot first.",
+        error: "NO_ACTIVE_SESSION" 
+      }, { status: 400 });
+    }
+
     const data = await req.json();
     const { uid } = data as { uid?: string };
 
@@ -37,24 +48,48 @@ export async function POST(req: NextRequest) {
     const normalizedUid = normalizeUid(uid);
     const student = studentDatabase[normalizedUid] || { name: "Unknown", rollNo: "Unknown" };
 
+    // Log attendance with session information
+    const id = await logAttendanceWithSession(
+      normalizedUid,
+      student.name,
+      student.rollNo,
+      activeSession.date,
+      activeSession.timeSlot
+    );
+
     const item: AttendanceItem = {
       uid: normalizedUid,
       name: student.name,
       rollNo: student.rollNo,
       timestamp: new Date().toISOString(),
+      date: activeSession.date,
+      timeSlot: activeSession.timeSlot,
     };
 
-    const id = await logAttendance({ uid: item.uid, name: item.name, rollNo: item.rollNo });
     console.log("New attendance recorded:", { id, ...item });
 
-    return NextResponse.json({ message: "UID received", id, item });
+    return NextResponse.json({ 
+      message: "UID received", 
+      id, 
+      item,
+      session: {
+        date: activeSession.date,
+        timeSlot: activeSession.timeSlot
+      }
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Error processing attendance:", err);
     return NextResponse.json({ message: "Error processing request" }, { status: 500 });
   }
 }
 
 export async function GET() {
-  const items = await getAttendance();
-  return NextResponse.json(items);
+  try {
+    // For now, return empty array since we're using hierarchical structure
+    // You can implement a different endpoint to get attendance by session
+    return NextResponse.json([]);
+  } catch (err) {
+    console.error("Error fetching attendance:", err);
+    return NextResponse.json({ message: "Error fetching attendance" }, { status: 500 });
+  }
 }
