@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getCurrentUser, logoutUser, isAdmin } from "@/lib/auth";
 
 interface ActiveSession {
   date: string;
@@ -28,6 +30,9 @@ export default function AdminPage() {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [viewDate, setViewDate] = useState("");
   const [viewTimeSlot, setViewTimeSlot] = useState("");
+  const [user, setUser] = useState<any>(null);
+  const [authorized, setAuthorized] = useState(false);
+  const router = useRouter();
 
   // Predefined time slots
   const timeSlots = [
@@ -40,9 +45,39 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    fetchActiveSession();
-    setSelectedDate(getCurrentDate());
-  }, []);
+    const checkAuth = async () => {
+      const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        router.push("/login");
+        return;
+      }
+      
+      setUser(currentUser);
+      
+      // Check if user is admin
+      const adminStatus = await isAdmin(currentUser.uid);
+      if (!adminStatus) {
+        await logoutUser();
+        router.push("/login");
+        return;
+      }
+      
+      setAuthorized(true);
+      fetchActiveSession();
+      setSelectedDate(getCurrentDate());
+    };
+    
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   const fetchActiveSession = async () => {
     try {
@@ -135,10 +170,22 @@ export default function AdminPage() {
     }
   };
 
+  if (!authorized) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Admin Panel - Attendance Sessions</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Panel - Attendance Sessions</h1>
+          <button
+            onClick={handleLogout}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg"
+          >
+            Logout
+          </button>
+        </div>
 
         {/* Current Active Session */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
