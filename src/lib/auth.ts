@@ -10,13 +10,14 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../firebase/Client";
 
 // Register user
-export const registerUser = async (email: string, password: string): Promise<User> => {
+export const registerUser = async (email: string, password: string, name: string): Promise<User> => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
     // Set user role as admin in Firestore
     await setDoc(doc(db, "users", userCredential.user.uid), {
       email: userCredential.user.email,
+      name: name,
       role: "admin",
       createdAt: new Date().toISOString()
     });
@@ -83,4 +84,18 @@ export const getCurrentUser = (): Promise<User | null> => {
       resolve(user);
     });
   });
+};
+
+// Get user data from Firestore
+export const getUserData = async (uid: string) => {
+  try {
+    const userDoc = await getDoc(doc(db, "users", uid));
+    if (userDoc.exists()) {
+      return userDoc.data();
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting user data:", error);
+    return null;
+  }
 };

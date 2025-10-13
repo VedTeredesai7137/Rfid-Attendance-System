@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const RegisterPage = () => {
+  const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -30,7 +31,7 @@ const RegisterPage = () => {
     setSuccess("");
 
     try {
-      const user = await registerUser(email, password);
+      const user = await registerUser(email, password, name);
       setSuccess(`Registered successfully: ${user.email}`);
       setTimeout(() => {
         router.push("/admin");
@@ -56,6 +57,26 @@ const RegisterPage = () => {
         {/* Form */}
         <form className="space-y-5" onSubmit={handleRegister}>
           <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                required
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
             <div>
               <label
                 htmlFor="email-address"
