@@ -4,7 +4,7 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export interface ActiveSession {
   date: string; // YYYY-MM-DD format
-  timeSlot: string; // e.g., "9-10", "10-11"
+  subject: string; // e.g., "AI", "PCE", "IoT"
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -20,18 +20,18 @@ export interface AttendanceRecord {
 }
 
 // Set active session
-export async function setActiveSession(date: string, timeSlot: string): Promise<void> {
+export async function setActiveSession(date: string, subject: string): Promise<void> {
   const sessionDoc = doc(db, "sessions", "active");
   const session: ActiveSession = {
     date,
-    timeSlot,
+    subject,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   
   await setDoc(sessionDoc, session);
-  console.log(`Active session set: ${date} - ${timeSlot}`);
+  console.log(`Active session set: ${date} - ${subject}`);
 }
 
 // Get active session

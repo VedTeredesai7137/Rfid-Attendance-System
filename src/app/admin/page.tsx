@@ -6,127 +6,174 @@ import { getCurrentUser, logoutUser, isAdmin, getUserData } from "@/lib/auth";
 
 interface ActiveSession {
   date: string;
-  timeSlot: string;
+  subject: string;
   isActive: boolean;
   createdAt: string;
-  updatedAt: string;
+}
+
+interface TimetableEntry {
+  subjectName: string;
+  timeSlot: string;
+  teacherEmail?: string;
 }
 
 interface AttendanceRecord {
   uid: string;
   name: string;
-  rollNo: string;
+  rollNumber: string;
+  present: boolean;
   timestamp: string;
   date: string;
-  timeSlot: string;
+  subject: string;
+  teacherEmail: string;
 }
 
 export default function AdminPage() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
+  const [selectedSubject, setSelectedSubject] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [viewDate, setViewDate] = useState("");
-  const [viewTimeSlot, setViewTimeSlot] = useState("");
+  const [viewSubject, setViewSubject] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [userName, setUserName] = useState<string>("");
+  const [availableEntries, setAvailableEntries] = useState<TimetableEntry[]>([]);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const router = useRouter();
 
-  // Predefined time slots
-  const timeSlots = [
-    "9-10", "10-11", "11-12", "12-13", "13-14", "14-15", "15-16", "16-17"
-  ];
+  const getCurrentDate = () => new Date().toISOString().split("T")[0];
 
-  // Get current date in YYYY-MM-DD format
-  const getCurrentDate = () => {
-    return new Date().toISOString().split('T')[0];
-  };
+  // compute day code from YYYY-MM-DD date
+  function dayCodeFromDate(isoDate: string) {
+    if (!isoDate) return "";
+    const d = new Date(isoDate + "T00:00:00");
+    const days = ["SUN", "MON", "TUE", "WED", "THUR", "FRI", "SAT"];
+    return days[d.getDay()];
+  }
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
+    const init = async () => {
+      const user = await getCurrentUser();
+      if (!user) {
         router.push("/login");
         return;
       }
-      
-
-      
-      // Check if user is admin
-      const adminStatus = await isAdmin(currentUser.uid);
+      const adminStatus = await isAdmin(user.uid);
       if (!adminStatus) {
         await logoutUser();
         router.push("/login");
         return;
       }
-      
       setAuthorized(true);
-      
-      // Fetch user data to get name
-      const userData = await getUserData(currentUser.uid);
-      if (userData && userData.name) {
-        setUserName(userData.name);
-      }
-      
-      fetchActiveSession();
+
+      const userData = await getUserData(user.uid);
+      setUserName(userData?.name || "");
+      setCurrentUserEmail(userData?.email || null);
+
+      // decide if they are "super admin" (full admin) or a teacher admin who should only see their subjects
+      setIsSuperAdmin(userData?.role === "admin");
+
       setSelectedDate(getCurrentDate());
+      setViewDate(getCurrentDate());
+
+      // load timetable for today's date automatically
+      const todayDay = dayCodeFromDate(getCurrentDate());
+      if (todayDay) await fetchTimetableForDay(todayDay, userData?.email ?? null);
+      await fetchActiveSession();
     };
-    
-    checkAuth();
+
+    init();
   }, [router]);
 
   const handleLogout = async () => {
-    try {
-      await logoutUser();
-      router.push("/login");
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+    await logoutUser();
+    router.push("/login");
   };
 
   const fetchActiveSession = async () => {
     try {
-      const response = await fetch("/api/session");
-      if (response.ok) {
-        const session = await response.json();
-        setActiveSession(session);
+      const res = await fetch("/api/session");
+      if (res.ok) {
+        const sess = await res.json();
+        setActiveSession(sess);
       }
-    } catch (error) {
-      console.error("Error fetching active session:", error);
+    } catch (err) {
+      console.error("fetchActiveSession:", err);
     }
   };
 
-  const setActiveSessionHandler = async () => {
-    if (!selectedDate || !selectedTimeSlot) {
-      setMessage("Please select both date and time slot");
+  // Fetch timetable entries for a given day code (MON/TUE/...)
+  const fetchTimetableForDay = async (dayCode: string, filterByTeacherEmail: string | null = null) => {
+    if (!dayCode) {
+      setAvailableEntries([]);
       return;
     }
-
     setLoading(true);
     try {
-      const response = await fetch("/api/session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          date: selectedDate,
-          timeSlot: selectedTimeSlot,
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setActiveSession(result.session);
-        setMessage(`Active session set: ${selectedDate} ${selectedTimeSlot}`);
-      } else {
-        const error = await response.json();
-        setMessage(`Error: ${error.message}`);
+      const res = await fetch(`/api/timetables?day=${encodeURIComponent(dayCode)}`);
+      if (!res.ok) {
+        setMessage("Failed to load timetable for " + dayCode);
+        setAvailableEntries([]);
+        return;
       }
-    } catch {
-      setMessage("Error setting active session");
+      const data: { subjects?: TimetableEntry[] } = await res.json();
+      let entries = Array.isArray(data.subjects) ? data.subjects : [];
+
+      // Filter by teacher email - show only subjects taught by the logged-in teacher
+      if (filterByTeacherEmail) {
+        entries = entries.filter((e) => (e.teacherEmail || "").toLowerCase() === filterByTeacherEmail.toLowerCase());
+      }
+
+      setAvailableEntries(entries);
+      // auto-select first subject for convenience
+      if (entries.length > 0) {
+        setSelectedSubject(entries[0].subjectName);
+      } else {
+        setSelectedSubject("");
+        setMessage(`No subjects found for ${dayCode}${filterByTeacherEmail ? ` for teacher ${filterByTeacherEmail}` : ""}`);
+      }
+    } catch (err) {
+      console.error("fetchTimetableForDay error:", err);
+      setAvailableEntries([]);
+      setMessage("Error loading timetable");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // When admin selects a date -> fetch the day timetable for that date
+  const onSelectedDateChange = async (isoDate: string) => {
+    setSelectedDate(isoDate);
+    const day = dayCodeFromDate(isoDate);
+    await fetchTimetableForDay(day, currentUserEmail);
+  };
+
+  const setActiveSessionHandler = async () => {
+    if (!selectedDate || !selectedSubject) {
+      setMessage("Please select date and subject.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate, subject: selectedSubject }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setActiveSession(result.session);
+        setMessage(`Active session set for ${selectedSubject} on ${selectedDate}`);
+      } else {
+        const err = await res.json();
+        setMessage(err.message || "Error setting session");
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage("Error setting session");
     } finally {
       setLoading(false);
     }
@@ -135,16 +182,10 @@ export default function AdminPage() {
   const deactivateSession = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/session", {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
+      const res = await fetch("/api/session", { method: "DELETE" });
+      if (res.ok) {
         setActiveSession(null);
         setMessage("Session deactivated");
-      } else {
-        const error = await response.json();
-        setMessage(`Error: ${error.message}`);
       }
     } catch {
       setMessage("Error deactivating session");
@@ -154,197 +195,140 @@ export default function AdminPage() {
   };
 
   const fetchAttendance = async () => {
-    if (!viewDate || !viewTimeSlot) {
-      setMessage("Please select both date and time slot to view attendance");
+    if (!viewDate || !viewSubject) {
+      setMessage("Select date & subject to view attendance");
       return;
     }
-
     setLoading(true);
     try {
-      const response = await fetch(`/api/attendance/view?date=${viewDate}&timeSlot=${viewTimeSlot}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAttendanceData(data);
-        setMessage(`Found ${data.length} attendance records`);
-      } else {
-        const error = await response.json();
-        setMessage(`Error: ${error.message}`);
+      const res = await fetch(`/api/attendance?date=${viewDate}&subject=${encodeURIComponent(viewSubject)}`);
+      if (!res.ok) {
+        const e = await res.json();
+        setMessage(e.message || "Failed to fetch attendance");
+        setAttendanceData([]);
+        return;
       }
-    } catch {
+      const records = await res.json();
+      setAttendanceData(records);
+      setMessage(`Loaded ${records.length} records`);
+    } catch (err) {
+      console.error("fetchAttendance", err);
       setMessage("Error fetching attendance");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!authorized) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
+  if (!authorized) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Admin Panel - Attendance Sessions</h1>
-            {userName && (
-              <p className="text-lg text-gray-600 mt-1">Welcome, {userName}</p>
-            )}
+            <h1 className="text-3xl font-bold">Admin Panel - Attendance</h1>
+            {userName && <p className="text-sm text-gray-600 mt-1">Welcome, {userName}</p>}
           </div>
-          <button
-            onClick={handleLogout}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg"
-          >
-            Logout
-          </button>
+          <button onClick={handleLogout} className="bg-gray-200 px-4 py-2 rounded">Logout</button>
         </div>
 
-        {/* Current Active Session */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Current Active Session</h2>
+        {/* Active Session */}
+        <div className="bg-white p-6 rounded mb-6 shadow">
+          <h2 className="font-semibold mb-3">Current Active Session</h2>
           {activeSession ? (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-lg font-medium text-green-800">
-                    {activeSession.date} - {activeSession.timeSlot}
-                  </p>
-                  <p className="text-sm text-green-600">
-                    Active since: {new Date(activeSession.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                <button
-                  onClick={deactivateSession}
-                  disabled={loading}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
-                >
-                  {loading ? "Deactivating..." : "Deactivate"}
-                </button>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="text-lg font-medium">{activeSession.date} — {activeSession.subject}</div>
+                <div className="text-xs text-gray-500">Active since: {new Date(activeSession.createdAt).toLocaleString()}</div>
               </div>
+              <button onClick={deactivateSession} className="bg-red-500 text-white px-3 py-2 rounded">Deactivate</button>
             </div>
           ) : (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-800">No active session. Please set a session below.</p>
-            </div>
+            <div className="text-red-600">No active session</div>
           )}
         </div>
 
-        {/* Set New Session */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Set New Active Session</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        {/* Set New Session: date -> fetch subjects for that day -> select subject */}
+        <div className="bg-white p-6 rounded mb-6 shadow">
+          <h2 className="font-semibold mb-3">Set New Active Session</h2>
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date
-              </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium mb-1">Date</label>
+              <input type="date" value={selectedDate} onChange={(e) => onSelectedDateChange(e.target.value)} className="w-full border rounded px-3 py-2" />
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Time Slot
-              </label>
-              <select
-                value={selectedTimeSlot}
-                onChange={(e) => setSelectedTimeSlot(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select time slot</option>
-                {timeSlots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot} AM/PM
+              <label className="block text-sm font-medium mb-1">Subject</label>
+              <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full border rounded px-3 py-2">
+                <option value="">Select subject</option>
+                {availableEntries.map((ent) => (
+                  <option key={`${ent.subjectName}-${ent.timeSlot}`} value={ent.subjectName}>
+                    {ent.subjectName} — {ent.timeSlot}
                   </option>
                 ))}
               </select>
             </div>
           </div>
-          <button
-            onClick={setActiveSessionHandler}
-            disabled={loading}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg disabled:opacity-50"
-          >
-            {loading ? "Setting..." : "Set Active Session"}
-          </button>
+          <div className="mt-4">
+            <button onClick={setActiveSessionHandler} className="bg-blue-600 text-white px-4 py-2 rounded">Set Active Session</button>
+          </div>
         </div>
 
         {/* View Attendance */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">View Attendance</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="bg-white p-6 rounded mb-6 shadow">
+          <h2 className="font-semibold mb-3">View Attendance</h2>
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date
-              </label>
-              <input
-                type="date"
-                value={viewDate}
-                onChange={(e) => setViewDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm mb-1">Date</label>
+              <input type="date" value={viewDate} onChange={(e) => {
+                setViewDate(e.target.value);
+                // also auto-load timetable for view date so users can pick subject
+                const day = dayCodeFromDate(e.target.value);
+                fetchTimetableForDay(day, currentUserEmail);
+              }} className="w-full border rounded px-3 py-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Time Slot
-              </label>
-              <select
-                value={viewTimeSlot}
-                onChange={(e) => setViewTimeSlot(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select time slot</option>
-                {timeSlots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot} AM/PM
+              <label className="block text-sm mb-1">Subject</label>
+              <select value={viewSubject} onChange={(e) => setViewSubject(e.target.value)} className="w-full border rounded px-3 py-2">
+                <option value="">Select subject</option>
+                {availableEntries.map((ent) => (
+                  <option key={`${ent.subjectName}-${ent.timeSlot}`} value={ent.subjectName}>
+                    {ent.subjectName} — {ent.timeSlot}
                   </option>
                 ))}
               </select>
             </div>
           </div>
-          <button
-            onClick={fetchAttendance}
-            disabled={loading}
-            className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "View Attendance"}
-          </button>
+          <div className="mt-4">
+            <button onClick={fetchAttendance} className="bg-green-600 text-white px-4 py-2 rounded">View</button>
+          </div>
         </div>
 
-        {/* Message Display */}
-        {message && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <p className="text-blue-800">{message}</p>
-          </div>
-        )}
+        {message && <div className="mb-6 p-4 bg-blue-50 rounded text-blue-700">{message}</div>}
 
-        {/* Attendance Table */}
+        {/* Attendance table */}
         {attendanceData.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Attendance for {viewDate} - {viewTimeSlot}
-            </h2>
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="font-semibold mb-3">Attendance for {viewDate} — {viewSubject}</h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border px-4 py-2 text-left">UID</th>
-                    <th className="border px-4 py-2 text-left">Name</th>
-                    <th className="border px-4 py-2 text-left">Roll No</th>
-                    <th className="border px-4 py-2 text-left">Timestamp</th>
+              <table className="min-w-full border">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-2 border">Student</th>
+                    <th className="p-2 border">Roll</th>
+                    <th className="p-2 border">Present</th>
+                    <th className="p-2 border">Teacher</th>
+                    <th className="p-2 border">Timestamp</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {attendanceData.map((record, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="border px-4 py-2">{record.uid}</td>
-                      <td className="border px-4 py-2">{record.name}</td>
-                      <td className="border px-4 py-2">{record.rollNo}</td>
-                      <td className="border px-4 py-2">
-                        {new Date(record.timestamp).toLocaleString()}
-                      </td>
+                  {attendanceData.map((r, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="p-2 border">{r.name}</td>
+                      <td className="p-2 border">{r.rollNumber}</td>
+                      <td className="p-2 border">{r.present ? "Present" : "Absent"}</td>
+                      <td className="p-2 border">{r.teacherEmail}</td>
+                      <td className="p-2 border">{new Date(r.timestamp).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -352,6 +336,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

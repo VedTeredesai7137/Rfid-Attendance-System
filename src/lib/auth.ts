@@ -76,6 +76,21 @@ export const isAdmin = async (uid: string): Promise<boolean> => {
   }
 };
 
+// Check if user is teacher
+export const isTeacher = async (uid: string): Promise<boolean> => {
+  try {
+    const userDoc = await getDoc(doc(db, "users", uid));
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return userData.role === "teacher";
+    }
+    return false;
+  } catch (error) {
+    console.error("Error checking teacher status:", error);
+    return false;
+  }
+};
+
 // Get current user
 export const getCurrentUser = (): Promise<User | null> => {
   return new Promise((resolve) => {

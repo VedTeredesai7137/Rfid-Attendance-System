@@ -16,10 +16,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
-    const { date, timeSlot } = data as { date?: string; timeSlot?: string };
+    const { date, subject } = data as { date?: string; subject?: string };
 
-    if (!date || !timeSlot) {
-      return NextResponse.json({ message: "Date and timeSlot are required" }, { status: 400 });
+    if (!date || !subject) {
+      return NextResponse.json({ message: "Date and subject are required" }, { status: 400 });
     }
 
     // Validate date format (YYYY-MM-DD)
@@ -28,13 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
     }
 
-    // Validate time slot format (e.g., "9-10", "10-11")
-    const timeSlotRegex = /^\d{1,2}-\d{1,2}$/;
-    if (!timeSlotRegex.test(timeSlot)) {
-      return NextResponse.json({ message: "Invalid time slot format. Use format like '9-10'" }, { status: 400 });
-    }
-
-    await setActiveSession(date, timeSlot);
+    await setActiveSession(date, subject);
     const session = await getActiveSession();
 
     return NextResponse.json({
