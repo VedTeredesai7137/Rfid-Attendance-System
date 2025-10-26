@@ -46,6 +46,15 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedUid = normalizeUid(uid);
+    
+    // Debug logging
+    console.log("=== DEBUG INFO ===");
+    console.log("Raw UID received:", JSON.stringify(uid));
+    console.log("Normalized UID:", JSON.stringify(normalizedUid));
+    console.log("Available database keys:", Object.keys(studentDatabase));
+    console.log("Direct match test:", normalizedUid in studentDatabase);
+    console.log("==================");
+    
     const student = studentDatabase[normalizedUid] || { name: "Unknown", rollNo: "Unknown" };
 
     // Log attendance with session information
