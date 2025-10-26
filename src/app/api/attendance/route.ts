@@ -76,6 +76,25 @@ async function logAttendanceForSubject(
   return attendanceDoc.id;
 }
 
+// Find teacher by subject from users collection
+async function findTeacherBySubject(subject: string): Promise<string | null> {
+  try {
+    const usersRef = collection(db, "users");
+    const snapshot = await getDocs(usersRef);
+    
+    for (const doc of snapshot.docs) {
+      const userData = doc.data();
+      if (Array.isArray(userData.Subjects) && userData.Subjects.includes(subject)) {
+        return userData.email;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Error finding teacher by subject:", error);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = req.headers.get("x-api-key");
@@ -87,42 +106,26 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await req.json();
-    const { uid, teacherEmail, subject } = data as { 
+    const { uid, date, subject, timeSlot, timestamp } = data as { 
       uid?: string; 
-      teacherEmail?: string; 
+      date?: string; 
       subject?: string; 
+      timeSlot?: string;
+      timestamp?: string;
     };
 
-    if (!uid) {
-      return NextResponse.json({ message: "UID missing" }, { status: 400 });
-    }
-
-    // Get current date
-    const currentDate = getCurrentDate();
-    
-    let finalTeacherEmail = teacherEmail;
-    let finalSubject = subject;
-
-    // If teacherEmail is not provided, try to get it from the request context
-    if (!finalTeacherEmail) {
+    if (!uid || !date || !subject || !timeSlot) {
       return NextResponse.json({ 
-        message: "Teacher email is required for attendance logging" 
+        message: "Missing required fields: uid, date, subject, timeSlot" 
       }, { status: 400 });
     }
 
-    // If subject is not provided, require it
-    if (!finalSubject) {
+    // Find teacher who teaches this subject
+    const teacherEmail = await findTeacherBySubject(subject);
+    if (!teacherEmail) {
       return NextResponse.json({ 
-        message: "Subject is required for attendance logging" 
-      }, { status: 400 });
-    }
-
-    // Verify that the teacher teaches this subject
-    const teacherSubjects = await getTeacherSubjects(finalTeacherEmail);
-    if (!teacherSubjects.includes(finalSubject)) {
-      return NextResponse.json({ 
-        message: `Teacher ${finalTeacherEmail} does not teach subject ${finalSubject}` 
-      }, { status: 403 });
+        message: `No teacher found for subject: ${subject}` 
+      }, { status: 404 });
     }
 
     const normalizedUid = normalizeUid(uid);
@@ -136,9 +139,9 @@ export async function POST(req: NextRequest) {
       normalizedUid,
       student.name,
       student.rollNo,
-      currentDate,
-      finalSubject,
-      finalTeacherEmail
+      date,
+      subject,
+      teacherEmail
     );
 
     const item: AttendanceItem = {
@@ -146,22 +149,31 @@ export async function POST(req: NextRequest) {
       name: student.name,
       rollNumber: student.rollNo,
       present: true,
-      timestamp: new Date().toISOString(),
-      date: currentDate,
-      subject: finalSubject,
-      teacherEmail: finalTeacherEmail,
+      timestamp: timestamp || new Date().toISOString(),
+      date: date,
+      subject: subject,
+      teacherEmail: teacherEmail,
     };
 
-    console.log("New attendance recorded:", { id, ...item });
+    console.log("✅ Attendance Recorded:", { 
+      uid: normalizedUid, 
+      subject: subject, 
+      timeSlot: timeSlot,
+      teacher: teacherEmail,
+      student: student.name,
+      timestamp: timestamp
+    });
 
     return NextResponse.json({ 
+      success: true,
       message: "Attendance recorded successfully", 
       id, 
       item,
       attendance: {
-        date: currentDate,
-        subject: finalSubject,
-        teacher: finalTeacherEmail
+        date: date,
+        subject: subject,
+        timeSlot: timeSlot,
+        teacher: teacherEmail
       }
     });
   } catch (err) {
