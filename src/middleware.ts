@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 
 export function middleware() {
   // For Firebase Auth, we can't reliably check authentication in middleware

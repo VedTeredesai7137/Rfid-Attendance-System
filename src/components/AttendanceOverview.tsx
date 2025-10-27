@@ -69,78 +69,10 @@ export default function AttendanceOverview() {
   });
   const [activeTab, setActiveTab] = useState<string>("weekly");
 
-  // Predefined time slots
-  const timeSlots = ["9-10", "10-11", "11-12", "13-14", "14-15", "15-16"];
-
   // --- Fetch attendance overview ---
-  const fetchAttendanceOverview = useCallback(async () => {
-    setOverviewLoading(true);
-    try {
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-      const slots = ["9-10", "10-11", "11-12", "13-14", "14-15", "15-16"];
-      const allRecords: AttendanceRecord[] = [];
-
-      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        for (const slot of slots) {
-          try {
-            const response = await fetch(`/api/attendance/view?date=${dateStr}&timeSlot=${slot}`);
-            if (response.ok) {
-              const data = await response.json();
-              if (Array.isArray(data)) {
-                data.forEach((record: any) => {
-                  const name = record.name || record.studentName || "Unknown";
-                  allRecords.push({
-                    uid: record.uid || "",
-                    name: name,
-                    studentName: name,
-                    rollNo: record.rollNo || "",
-                    timestamp: record.timestamp || new Date().toISOString(),
-                    date: dateStr,
-                    slot,
-                    subject: record.subject || slot,
-                  });
-                });
-              }
-            }
-          } catch {
-            console.log(`No data for ${dateStr} ${slot}`);
-          }
-        }
-      }
-
-      const students = Array.from(new Set(allRecords.map((r) => r.studentName))).sort();
-      setUniqueStudents(students);
-
-      const groupedByWeek: Record<string, AttendanceRecord[]> = {};
-      allRecords.forEach((rec) => {
-        const weekNum = getWeekNumber(rec.date);
-        if (!groupedByWeek[weekNum]) groupedByWeek[weekNum] = [];
-        groupedByWeek[weekNum].push(rec);
-      });
-
-      const weekArray = Object.entries(groupedByWeek).map(([weekNumber, records]) => {
-        const sorted = records.sort((a: AttendanceRecord, b: AttendanceRecord) => a.date.localeCompare(b.date));
-        return {
-          weekNumber: parseInt(weekNumber),
-          totalRecords: records.length,
-          startDate: sorted[0].date,
-          endDate: sorted[sorted.length - 1].date,
-        };
-      });
-
-      setWeeklyData(weekArray.sort((a, b) => b.weekNumber - a.weekNumber));
-      setAttendanceOverviewData(allRecords);
-      computeAdvancedAnalytics(allRecords);
-    } catch (err) {
-      console.error("Error fetching overview:", err);
-    } finally {
-      setOverviewLoading(false);
-    }
-  }, []);
-
-  const computeAdvancedAnalytics = (allRecords: AttendanceRecord[]) => {
+  const computeAdvancedAnalytics = useCallback((allRecords: AttendanceRecord[]) => {
+    // Predefined time slots
+    const timeSlots = ["9-10", "10-11", "11-12", "13-14", "14-15", "15-16"];
     if (allRecords.length === 0) return;
 
     const uniqueDates = [...new Set(allRecords.map(r => r.date))];
@@ -184,7 +116,7 @@ export default function AttendanceOverview() {
       const slotRecords = allRecords.filter(r => r.slot === slot);
       const avgAttendance = slotRecords.length / uniqueDates.length;
       const attendanceRate = ((slotRecords.length / (uniqueDates.length * totalStudents)) * 100).toFixed(1);
-      
+
       return {
         slot,
         totalAttendance: slotRecords.length,
@@ -196,7 +128,74 @@ export default function AttendanceOverview() {
 
     slotStatistics.sort((a, b) => b.attendanceRate - a.attendanceRate);
     setSlotStats(slotStatistics);
-  };
+  }, []);
+
+  const fetchAttendanceOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    try {
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+      const slots = ["9-10", "10-11", "11-12", "13-14", "14-15", "15-16"];
+      const allRecords: AttendanceRecord[] = [];
+
+      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        for (const slot of slots) {
+          try {
+            const response = await fetch(`/api/attendance/view?date=${dateStr}&timeSlot=${slot}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (Array.isArray(data)) {
+                data.forEach((record: Record<string, unknown>) => {
+                  const name = (record.name as string) || (record.studentName as string) || "Unknown";
+                  allRecords.push({
+                    uid: (record.uid as string) || "",
+                    name: name,
+                    studentName: name,
+                    rollNo: (record.rollNo as string) || "",
+                    timestamp: (record.timestamp as string) || new Date().toISOString(),
+                    date: dateStr,
+                    slot,
+                    subject: (record.subject as string) || slot,
+                  });
+                });
+              }
+            }
+          } catch {
+            console.log(`No data for ${dateStr} ${slot}`);
+          }
+        }
+      }
+
+      const students = Array.from(new Set(allRecords.map((r) => r.studentName))).sort();
+      setUniqueStudents(students);
+
+      const groupedByWeek: Record<string, AttendanceRecord[]> = {};
+      allRecords.forEach((rec) => {
+        const weekNum = getWeekNumber(rec.date);
+        if (!groupedByWeek[weekNum]) groupedByWeek[weekNum] = [];
+        groupedByWeek[weekNum].push(rec);
+      });
+
+      const weekArray = Object.entries(groupedByWeek).map(([weekNumber, records]) => {
+        const sorted = records.sort((a: AttendanceRecord, b: AttendanceRecord) => a.date.localeCompare(b.date));
+        return {
+          weekNumber: parseInt(weekNumber),
+          totalRecords: records.length,
+          startDate: sorted[0].date,
+          endDate: sorted[sorted.length - 1].date,
+        };
+      });
+
+      setWeeklyData(weekArray.sort((a, b) => b.weekNumber - a.weekNumber));
+      setAttendanceOverviewData(allRecords);
+      computeAdvancedAnalytics(allRecords);
+    } catch (err) {
+      console.error("Error fetching overview:", err);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [computeAdvancedAnalytics]);
 
   const handleStudentSelection = (studentName: string) => {
     setSelectedStudent(studentName);
@@ -269,41 +268,37 @@ export default function AttendanceOverview() {
       <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
         <button
           onClick={() => setActiveTab("weekly")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === "weekly"
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "weekly"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
-          }`}
+            }`}
         >
           📅 Weekly Summary
         </button>
         <button
           onClick={() => setActiveTab("students")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === "students"
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "students"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
-          }`}
+            }`}
         >
           👥 Student Analytics
         </button>
         <button
           onClick={() => setActiveTab("slots")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === "slots"
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "slots"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
-          }`}
+            }`}
         >
           ⏰ Time Slot Analysis
         </button>
         <button
           onClick={() => setActiveTab("individual")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === "individual"
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "individual"
               ? "bg-white text-blue-600 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
-          }`}
+            }`}
         >
           🔍 Individual View
         </button>
@@ -370,19 +365,17 @@ export default function AttendanceOverview() {
                       <td className="border px-3 py-2 text-sm font-medium">{student.name}</td>
                       <td className="border px-3 py-2 text-sm">{student.attended}</td>
                       <td className="border px-3 py-2 text-sm">{student.totalLecturesConducted}</td>
-                      <td className={`border px-3 py-2 text-sm font-medium ${
-                        student.percent >= 75 ? "text-green-600" : 
-                        student.percent >= 50 ? "text-yellow-600" : "text-red-600"
-                      }`}>
+                      <td className={`border px-3 py-2 text-sm font-medium ${student.percent >= 75 ? "text-green-600" :
+                          student.percent >= 50 ? "text-yellow-600" : "text-red-600"
+                        }`}>
                         {student.percent}%
                       </td>
                       <td className="border px-3 py-2 text-sm">{student.missedDays}</td>
                       <td className="border px-3 py-2 text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          student.status === 'Good' ? "bg-green-100 text-green-800" :
-                          student.status === 'Average' ? "bg-yellow-100 text-yellow-800" :
-                          "bg-red-100 text-red-800"
-                        }`}>
+                        <span className={`px-2 py-1 rounded-full text-xs ${student.status === 'Good' ? "bg-green-100 text-green-800" :
+                            student.status === 'Average' ? "bg-yellow-100 text-yellow-800" :
+                              "bg-red-100 text-red-800"
+                          }`}>
                           {student.status}
                         </span>
                       </td>
@@ -420,19 +413,17 @@ export default function AttendanceOverview() {
                       <td className="border px-3 py-2 text-sm font-medium">{slot.slot}</td>
                       <td className="border px-3 py-2 text-sm">{slot.totalAttendance}</td>
                       <td className="border px-3 py-2 text-sm">{slot.avgPerDay}</td>
-                      <td className={`border px-3 py-2 text-sm font-medium ${
-                        slot.attendanceRate >= 75 ? "text-green-600" : 
-                        slot.attendanceRate >= 50 ? "text-yellow-600" : "text-red-600"
-                      }`}>
+                      <td className={`border px-3 py-2 text-sm font-medium ${slot.attendanceRate >= 75 ? "text-green-600" :
+                          slot.attendanceRate >= 50 ? "text-yellow-600" : "text-red-600"
+                        }`}>
                         {slot.attendanceRate}%
                       </td>
                       <td className="border px-3 py-2 text-sm">
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              slot.attendanceRate >= 75 ? "bg-green-500" : 
-                              slot.attendanceRate >= 50 ? "bg-yellow-500" : "bg-red-500"
-                            }`}
+                          <div
+                            className={`h-2 rounded-full ${slot.attendanceRate >= 75 ? "bg-green-500" :
+                                slot.attendanceRate >= 50 ? "bg-yellow-500" : "bg-red-500"
+                              }`}
                             style={{ width: `${Math.min(slot.attendanceRate, 100)}%` }}
                           ></div>
                         </div>
@@ -512,7 +503,7 @@ export default function AttendanceOverview() {
                   <span className="font-bold">{studentAttendanceData.length}</span> attendance record(s)
                 </p>
               </div>
-              
+
               {(() => {
                 const studentStat = studentStats.find((s: StudentStat) => s.name === selectedStudent);
                 return studentStat ? (
@@ -520,10 +511,9 @@ export default function AttendanceOverview() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-gray-600">Attendance Rate:</span>
-                        <span className={`ml-2 font-bold ${
-                          studentStat.percent >= 75 ? "text-green-600" : 
-                          studentStat.percent >= 50 ? "text-yellow-600" : "text-red-600"
-                        }`}>
+                        <span className={`ml-2 font-bold ${studentStat.percent >= 75 ? "text-green-600" :
+                            studentStat.percent >= 50 ? "text-yellow-600" : "text-red-600"
+                          }`}>
                           {studentStat.percent}%
                         </span>
                       </div>
@@ -537,11 +527,10 @@ export default function AttendanceOverview() {
                       </div>
                       <div>
                         <span className="text-gray-600">Status:</span>
-                        <span className={`ml-2 px-2 py-1 rounded text-xs ${
-                          studentStat.status === 'Good' ? "bg-green-100 text-green-800" :
-                          studentStat.status === 'Average' ? "bg-yellow-100 text-yellow-800" :
-                          "bg-red-100 text-red-800"
-                        }`}>
+                        <span className={`ml-2 px-2 py-1 rounded text-xs ${studentStat.status === 'Good' ? "bg-green-100 text-green-800" :
+                            studentStat.status === 'Average' ? "bg-yellow-100 text-yellow-800" :
+                              "bg-red-100 text-red-800"
+                          }`}>
                           {studentStat.status}
                         </span>
                       </div>
