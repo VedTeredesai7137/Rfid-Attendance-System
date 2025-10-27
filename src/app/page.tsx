@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+// import Image from "next/image";
 
 interface ActiveSession {
   date: string;
@@ -13,7 +13,7 @@ interface ActiveSession {
 }
 
 export default function Home() {
-  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [, setActiveSession] = useState<ActiveSession | null>(null);
 
   // Fetch active session every 5 seconds
   useEffect(() => {
